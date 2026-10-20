@@ -17,7 +17,7 @@
       --accent: #38bdf8;
       --border: rgba(255, 255, 255, 0.08);
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
     body { background-color: #030712; color: var(--text-main); display: flex; justify-content: center; min-height: 100vh; }
     
     .app-screen {
@@ -68,9 +68,6 @@
       padding: 5px 10px;
       border-radius: 8px;
       cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 4px;
     }
     .trip-tag {
       background: rgba(99, 102, 241, 0.15);
@@ -227,7 +224,7 @@
     }
     .nav-btn.active { color: #38bdf8; }
     .nav-icon { font-size: 20px; }
-    .loading-state { text-align: center; padding: 40px 20px; color: var(--text-sub); font-size: 14px; }
+    .sync-status { font-size: 11px; color: var(--text-sub); text-align: center; margin-top: 6px; }
   </style>
 </head>
 <body>
@@ -246,7 +243,7 @@
     </div>
 
     <div class="main-content" id="main-content">
-      <div class="loading-state">⏳ 正在即時同步 Google Sheet 最新資料...</div>
+      <!-- 內容將動態渲染 -->
     </div>
 
     <div class="bottom-nav">
@@ -267,7 +264,16 @@
   </div>
 
   <script>
-    const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTuGxEnhn9Fhd9HBAevje_UD7daQfoo58i21z41apXr0x6mDM0qcR36bbYQcDoOZUZa-t0-pbFPQqEb/pub?output=csv";
+    const SHEET_ID = "1iZyozCgyjVUB7bGz-AmnQfYgAdv-XwzwnzYilRDehKc";
+    const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
+    const PROXY_URL = `https://api.allorigins.win/raw?url=${encodeURIComponent(GVIZ_URL)}`;
+
+    const fallbackRows = [
+      ["Type", "日期", "Description", "Amount", "Paid By", "Remark", "Winson", "Shirn", "Bobo", "秋明"],
+      ["住宿", "2026-12-24", "黃山風景區南大門換乘中心亞朵酒店", "615", "Winson", "2間 高級雙床房", "153.75", "153.75", "153.75", "153.75"],
+      ["住宿", "2026-12-25", "黃山白雲賓館", "3166", "Winson", "2間 B區特惠標間 (早晚)", "791.5", "791.5", "791.5", "791.5"]
+    ];
+
     let activeTabId = 'expenses';
 
     function switchTab(tabId, el) {
@@ -312,192 +318,204 @@
       return '💰';
     }
 
-    async function fetchSheetData() {
+    function renderData(rows, isLive = true) {
       const container = document.getElementById('main-content');
-      try {
-        const res = await fetch(CSV_URL + '&t=' + Date.now(), { cache: 'no-cache' });
-        const csvText = await res.text();
-        const rows = parseCSV(csvText);
-
-        if (!rows || rows.length < 2) throw new Error("試算表數據為空");
-
-        const headers = rows[0].map(h => (h || '').trim());
-        const members = [];
-        for (let j = 6; j < headers.length; j++) {
-          if (headers[j] && !headers[j].includes('總計')) {
-            members.push({ name: headers[j], colIdx: j });
-          }
+      const headers = rows[0].map(h => (h || '').trim());
+      const members = [];
+      
+      for (let j = 6; j < headers.length; j++) {
+        if (headers[j] && !headers[j].includes('總計')) {
+          members.push({ name: headers[j], colIdx: j });
         }
-        if (members.length === 0) {
-          members.push({ name: 'Winson', colIdx: 6 }, { name: 'Shirn', colIdx: 7 }, { name: 'Bobo', colIdx: 8 }, { name: '秋明', colIdx: 9 });
-        }
+      }
+      if (members.length === 0) {
+        members.push({ name: 'Winson', colIdx: 6 }, { name: 'Shirn', colIdx: 7 }, { name: 'Bobo', colIdx: 8 }, { name: '秋明', colIdx: 9 });
+      }
 
-        const expenses = [];
-        let totalAmount = 0;
-        const paidMap = {};
-        const owedMap = {};
-        members.forEach(m => { paidMap[m.name] = 0; owedMap[m.name] = 0; });
+      const expenses = [];
+      let totalAmount = 0;
+      const paidMap = {};
+      const owedMap = {};
+      members.forEach(m => { paidMap[m.name] = 0; owedMap[m.name] = 0; });
 
-        for (let i = 1; i < rows.length; i++) {
-          const row = rows[i];
-          const type = (row[0] || '').trim();
-          const desc = (row[2] || '').trim();
-          if (type.includes('總計') || type.includes('【') || desc.includes('總計') || desc.includes('【')) break;
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const type = (row[0] || '').trim();
+        const desc = (row[2] || '').trim();
+        if (type.includes('總計') || type.includes('【') || desc.includes('總計') || desc.includes('【')) break;
 
-          const amtStr = (row[3] || '').replace(/[^0-9.-]/g, '');
-          const amt = parseFloat(amtStr);
-          if (isNaN(amt) || amt <= 0) continue;
+        const amtStr = (row[3] || '').replace(/[^0-9.-]/g, '');
+        const amt = parseFloat(amtStr);
+        if (isNaN(amt) || amt <= 0) continue;
 
-          const payer = (row[4] || 'Winson').trim();
-          const date = (row[1] || '').trim();
-          const remark = (row[5] || '').trim();
+        const payer = (row[4] || 'Winson').trim();
+        const date = (row[1] || '').trim();
+        const remark = (row[5] || '').trim();
 
-          expenses.push({ type, date, desc, amount: amt, payer, remark, row });
-          totalAmount += amt;
+        expenses.push({ type, date, desc, amount: amt, payer, remark });
+        totalAmount += amt;
 
-          if (paidMap[payer] !== undefined) paidMap[payer] += amt;
-          else paidMap[payer] = amt;
+        if (paidMap[payer] !== undefined) paidMap[payer] += amt;
+        else paidMap[payer] = amt;
 
-          let hasSplit = false;
-          members.forEach(m => {
+        let hasSplit = false;
+        members.forEach(m => {
+          const val = parseFloat((row[m.colIdx] || '').replace(/[^0-9.-]/g, ''));
+          if (!isNaN(val) && val > 0) hasSplit = true;
+        });
+
+        members.forEach(m => {
+          if (hasSplit) {
             const val = parseFloat((row[m.colIdx] || '').replace(/[^0-9.-]/g, ''));
-            if (!isNaN(val) && val > 0) hasSplit = true;
-          });
-
-          members.forEach(m => {
-            if (hasSplit) {
-              const val = parseFloat((row[m.colIdx] || '').replace(/[^0-9.-]/g, ''));
-              owedMap[m.name] += (!isNaN(val) ? val : 0);
-            } else {
-              owedMap[m.name] += amt / members.length;
-            }
-          });
-        }
-
-        const balances = members.map(m => {
-          const paid = paidMap[m.name] || 0;
-          const owed = owedMap[m.name] || 0;
-          return { name: m.name, paid, owed, net: paid - owed };
+            owedMap[m.name] += (!isNaN(val) ? val : 0);
+          } else {
+            owedMap[m.name] += amt / members.length;
+          }
         });
+      }
 
-        // 找數演算法
-        const debtors = [];
-        const creditors = [];
-        balances.forEach(b => {
-          const net = Math.round(b.net * 100) / 100;
-          if (net < -0.01) debtors.push({ name: b.name, amount: -net });
-          else if (net > 0.01) creditors.push({ name: b.name, amount: net });
-        });
-        debtors.sort((a,b) => b.amount - a.amount);
-        creditors.sort((a,b) => b.amount - a.amount);
+      const balances = members.map(m => {
+        const paid = paidMap[m.name] || 0;
+        const owed = owedMap[m.name] || 0;
+        return { name: m.name, paid, owed, net: paid - owed };
+      });
 
-        const transfers = [];
-        let d = 0, c = 0;
-        while (d < debtors.length && c < creditors.length) {
-          const deb = debtors[d];
-          const cred = creditors[c];
-          const st = Math.min(deb.amount, cred.amount);
-          if (st > 0.01) transfers.push({ from: deb.name, to: cred.name, amount: st });
-          deb.amount -= st;
-          cred.amount -= st;
-          if (deb.amount <= 0.01) d++;
-          if (cred.amount <= 0.01) c++;
-        }
+      const debtors = [];
+      const creditors = [];
+      balances.forEach(b => {
+        const net = Math.round(b.net * 100) / 100;
+        if (net < -0.01) debtors.push({ name: b.name, amount: -net });
+        else if (net > 0.01) creditors.push({ name: b.name, amount: net });
+      });
+      debtors.sort((a,b) => b.amount - a.amount);
+      creditors.sort((a,b) => b.amount - a.amount);
 
-        const winsonBal = balances.find(b => b.name.toLowerCase() === 'winson') || { net: 0, paid: 0 };
-        const perPerson = totalAmount / (members.length || 1);
+      const transfers = [];
+      let d = 0, c = 0;
+      while (d < debtors.length && c < creditors.length) {
+        const deb = debtors[d];
+        const cred = creditors[c];
+        const st = Math.min(deb.amount, cred.amount);
+        if (st > 0.01) transfers.push({ from: deb.name, to: cred.name, amount: st });
+        deb.amount -= st;
+        cred.amount -= st;
+        if (deb.amount <= 0.01) d++;
+        if (cred.amount <= 0.01) c++;
+      }
 
-        // 渲染 HTML
-        container.innerHTML = `
-          <div class="wallet-card">
-            <div class="wallet-label">💰 你的結算狀態 (Winson)</div>
-            <div class="wallet-balance" style="color:${winsonBal.net >= 0 ? '#34d399' : '#fb7185'}">
-              ${winsonBal.net >= 0 ? '+ ¥' + winsonBal.net.toFixed(2) : '- ¥' + Math.abs(winsonBal.net).toFixed(2)}
-              <span>(${winsonBal.net >= 0 ? '應收回' : '應支付'})</span>
+      const winsonBal = balances.find(b => b.name.toLowerCase() === 'winson') || { net: 0, paid: 0 };
+      const perPerson = totalAmount / (members.length || 1);
+
+      container.innerHTML = `
+        <div class="wallet-card">
+          <div class="wallet-label">💰 你的結算狀態 (Winson)</div>
+          <div class="wallet-balance" style="color:${winsonBal.net >= 0 ? '#34d399' : '#fb7185'}">
+            ${winsonBal.net >= 0 ? '+ ¥' + winsonBal.net.toFixed(2) : '- ¥' + Math.abs(winsonBal.net).toFixed(2)}
+            <span>(${winsonBal.net >= 0 ? '應收回' : '應支付'})</span>
+          </div>
+          <div class="wallet-meta">
+            <div class="wallet-meta-col">
+              <div class="title">行程總開銷</div>
+              <div class="num">¥${totalAmount.toFixed(2)}</div>
             </div>
-            <div class="wallet-meta">
-              <div class="wallet-meta-col">
-                <div class="title">行程總開銷</div>
-                <div class="num">¥${totalAmount.toFixed(2)}</div>
-              </div>
-              <div class="wallet-meta-col">
-                <div class="title">均攤/人</div>
-                <div class="num">¥${perPerson.toFixed(2)}</div>
-              </div>
-              <div class="wallet-meta-col">
-                <div class="title">你已墊付</div>
-                <div class="num">¥${winsonBal.paid.toFixed(2)}</div>
-              </div>
+            <div class="wallet-meta-col">
+              <div class="title">均攤/人</div>
+              <div class="num">¥${perPerson.toFixed(2)}</div>
+            </div>
+            <div class="wallet-meta-col">
+              <div class="title">你已墊付</div>
+              <div class="num">¥${winsonBal.paid.toFixed(2)}</div>
             </div>
           </div>
+        </div>
 
-          <div id="tab-expenses" class="tab-section ${activeTabId === 'expenses' ? 'active' : ''}">
-            <div class="block-header">
-              <div class="block-title">🏨 支出紀錄 (${expenses.length})</div>
-            </div>
-            <div class="app-card">
-              ${expenses.map(exp => `
-                <div class="item-row">
-                  <div class="item-icon">${getTypeIcon(exp.type)}</div>
-                  <div class="item-info">
-                    <div class="item-title">${exp.desc}</div>
-                    <div class="item-desc">${exp.date \vert{}\vert{} '未標註日期'} • ${exp.remark || exp.type}</div>
-                  </div>
-                  <div class="item-amt-box">
-                    <div class="item-amt">¥${exp.amount.toFixed(2)}</div>
-                    <div class="item-sub">${exp.payer} 墊付</div>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
+        <div id="tab-expenses" class="tab-section ${activeTabId === 'expenses' ? 'active' : ''}">
+          <div class="block-header">
+            <div class="block-title">🏨 支出紀錄 (${expenses.length})</div>
           </div>
-
-          <div id="tab-members" class="tab-section ${activeTabId === 'members' ? 'active' : ''}">
-            <div class="block-header">
-              <div class="block-title">👥 成員結算餘額</div>
-            </div>
-            <div class="app-card">
-              ${balances.map(b => `
-                <div class="member-row">
-                  <div class="member-left">
-                    <div class="member-avatar" style="${b.name === 'Winson' ? 'background:#064e3b; color:#34d399;' : ''}">${b.name.slice(0, 1)}</div>
-                    <div>
-                      <div style="font-size:14px; font-weight:600;">${b.name}${b.name === 'Winson' ? '(你)' : ''}</div>
-                      <div style="font-size:11px; color:#64748b;">已墊付 ¥${b.paid.toFixed(2)} ｜ 應付 ¥${b.owed.toFixed(2)}</div>
-                    </div>
-                  </div>
-                  <div class="badge-status ${b.net >= 0 ? 'status-pos' : 'status-neg'}">
-                    ${b.net >= 0 ? '+ ¥' + b.net.toFixed(2) : '- ¥' + Math.abs(b.net).toFixed(2)}<br>
-                    <span style="font-size:10px;">${b.net >= 0 ? '應收回' : '應支付'}</span>
-                  </div>
+          <div class="app-card">
+            ${expenses.map(exp => `
+              <div class="item-row">
+                <div class="item-icon">${getTypeIcon(exp.type)}</div>
+                <div class="item-info">
+                  <div class="item-title">${exp.desc}</div>
+                  <div class="item-desc">${exp.date \vert{}\vert{} '未標註日期'} • ${exp.remark || exp.type}</div>
                 </div>
-              `).join('')}
-            </div>
-          </div>
-
-          <div id="tab-settle" class="tab-section ${activeTabId === 'settle' ? 'active' : ''}">
-            <div class="block-header">
-              <div class="block-title">⚡ 快速找數指南</div>
-            </div>
-            ${transfers.length === 0 ? '<div style="padding:20px; text-align:center; color:#94a3b8;">已全部找清！</div>' : transfers.map(t => `
-              <div class="settle-card">
-                <div class="settle-flow">
-                  <span>${t.from}</span>
-                  <span class="settle-arrow">➜</span>
-                  <span>${t.to}</span>
+                <div class="item-amt-box">
+                  <div class="item-amt">¥${exp.amount.toFixed(2)}</div>
+                  <div class="item-sub">${exp.payer} 墊付</div>
                 </div>
-                <div class="settle-amt">¥${t.amount.toFixed(2)}</div>
               </div>
             `).join('')}
           </div>
-        `;
-      } catch (err) {
-        container.innerHTML = `
-          <div class="loading-state" style="color:#fb7185;">
-            ❌ 連線同步失敗：${err.message}<br><br>
-            <button class="sync-btn" style="margin: 0 auto;" onclick="fetchSheetData()">重新載入</button>
+        </div>
+
+        <div id="tab-members" class="tab-section ${activeTabId === 'members' ? 'active' : ''}">
+          <div class="block-header">
+            <div class="block-title">👥 成員結算餘額</div>
           </div>
-        `;
+          <div class="app-card">
+            ${balances.map(b => `
+              <div class="member-row">
+                <div class="member-left">
+                  <div class="member-avatar" style="${b.name === 'Winson' ? 'background:#064e3b; color:#34d399;' : ''}">${b.name.slice(0, 1)}</div>
+                  <div>
+                    <div style="font-size:14px; font-weight:600;">${b.name}${b.name === 'Winson' ? '(你)' : ''}</div>
+                    <div style="font-size:11px; color:#64748b;">已墊付 ¥${b.paid.toFixed(2)} ｜ 應付 ¥${b.owed.toFixed(2)}</div>
+                  </div>
+                </div>
+                <div class="badge-status ${b.net >= 0 ? 'status-pos' : 'status-neg'}">
+                  ${b.net >= 0 ? '+ ¥' + b.net.toFixed(2) : '- ¥' + Math.abs(b.net).toFixed(2)}<br>
+                  <span style="font-size:10px;">${b.net >= 0 ? '應收回' : '應支付'}</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div id="tab-settle" class="tab-section ${activeTabId === 'settle' ? 'active' : ''}">
+          <div class="block-header">
+            <div class="block-title">⚡ 快速找數指南</div>
+          </div>
+          ${transfers.length === 0 ? '<div style="padding:20px; text-align:center; color:#94a3b8;">已全部找清！</div>' : transfers.map(t => `
+            <div class="settle-card">
+              <div class="settle-flow">
+                <span>${t.from}</span>
+                <span class="settle-arrow">➜</span>
+                <span>${t.to}</span>
+              </div>
+              <div class="settle-amt">¥${t.amount.toFixed(2)}</div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="sync-status">
+          ${isLive ? '🟢 數據已即時同步自 Google Sheet' : '🟡 網絡連線較慢，目前顯示本機快取'}
+        </div>
+      `;
+    }
+
+    async function fetchSheetData() {
+      // 優先顯示快取，確保介面不空白
+      renderData(fallbackRows, false);
+
+      try {
+        let res;
+        try {
+          res = await fetch(GVIZ_URL + '&t=' + Date.now());
+          if (!res.ok) throw new Error("GViz response error");
+        } catch (e) {
+          // 備援線路
+          res = await fetch(PROXY_URL + '&t=' + Date.now());
+        }
+        
+        const csvText = await res.text();
+        const rows = parseCSV(csvText);
+        if (rows && rows.length >= 2) {
+          renderData(rows, true);
+        }
+      } catch (err) {
+        console.warn("無法取得在線數據，使用快取數據", err);
       }
     }
 

@@ -33,7 +33,6 @@
       border-right: 1px solid rgba(255,255,255,0.05);
     }
 
-    /* 頂部列 */
     .top-bar {
       padding: 16px 16px 8px;
       display: flex;
@@ -81,7 +80,7 @@
       font-weight: 600;
     }
 
-    /* 頂部 4 粒分頁按鈕 */
+    /* 頂部 4 粒分頁列 (避開右下角 Netlify 浮水印) */
     .top-nav-bar {
       margin: 8px 16px 14px;
       display: flex;
@@ -116,7 +115,6 @@
     }
     .nav-icon { font-size: 14px; }
 
-    /* 主滾動區域 */
     .main-content {
       flex: 1;
       overflow-y: auto;
@@ -166,7 +164,7 @@
       margin-bottom: 14px;
     }
 
-    /* 行程卡片 */
+    /* 行程專用卡片 */
     .day-card {
       background: var(--card-bg);
       border: 1px solid var(--border);
@@ -229,7 +227,7 @@
       word-break: break-word;
     }
 
-    /* 開銷明細列表 */
+    /* 開銷明細 */
     .item-row {
       display: flex;
       align-items: center;
@@ -256,7 +254,7 @@
     .item-amt { font-size: 15px; font-weight: 700; color: #f8fafc; }
     .item-sub { font-size: 11px; color: #38bdf8; margin-top: 2px; }
 
-    /* 成員結算行 */
+    /* 成員結算 */
     .member-row {
       display: flex;
       align-items: center;
@@ -304,7 +302,6 @@
 
     .sync-status { font-size: 11px; color: var(--text-sub); text-align: center; margin-top: 15px; }
 
-    /* 隱藏 Netlify 浮動水印 */
     #netlify-badge, .netlify-badge, [class*="netlify-badge"] {
       display: none !important;
       opacity: 0 !important;
@@ -316,7 +313,6 @@
 
   <div class="app-screen">
     
-    <!-- 頂部列 -->
     <div class="top-bar">
       <div class="user-pill">
         <div class="mini-avatar">W</div>
@@ -328,7 +324,6 @@
       </div>
     </div>
 
-    <!-- 頂部切換 4 粒掣 -->
     <div class="top-nav-bar">
       <button class="nav-btn active" id="btn-itinerary" onclick="switchTab('itinerary', this)">
         <span class="nav-icon">🗓️</span>
@@ -348,24 +343,17 @@
       </button>
     </div>
 
-    <!-- 主內容區 -->
     <div class="main-content" id="main-content">
-      <!-- 渲染內容 -->
+      <!-- 內容渲染區 -->
     </div>
 
   </div>
 
   <script>
-    // =========================================================================
-    // ⚙️ 設定區：Google Sheets CSV 連結
-    // =========================================================================
-    const EXPENSE_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTuGxEnhn9Fhd9HBAevje_UD7daQfoo58i21z41apXr0x6mDM0qcR36bbYQcDoOZUZa-t0-pbFPQqEb/pubhtml?gid=213409461&single=true";
+    // 你的 Google 試算表 ID
+    const SPREADSHEET_ID = "1iZyozCgyjVUB7bGz-AmnQfYgAdv-XwzwnzYilRDehKc";
 
-    // 👉 在此處貼上你的 Itinerary 工作表 CSV 連結（若暫無可先留空 ""）：
-    const ITINERARY_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTuGxEnhn9Fhd9HBAevje_UD7daQfoo58i21z41apXr0x6mDM0qcR36bbYQcDoOZUZa-t0-pbFPQqEb/pubhtml?gid=1193501352&single=true";
-    // =========================================================================
-
-    // 預設資料：即刻渲染，零延遲
+    // 初始基準數據（包含你剛更新的 D1 行程）
     const initialData = {
       total: 3781.00,
       perPerson: 945.25,
@@ -392,8 +380,9 @@
           date: "24/12/2026",
           weekday: "Thur",
           items: [
-            "G998 15:10 to 20:04 深圳北 to 黃山北",
-            "黄山风景区南大门换乘中心亚朵酒店 (RMB 315) or 如家商旅酒店(黄山风景区换乘中心店)(RMB198)"
+            "G902 11:35 to 17:06 香港西九龍 to 黃山北",
+            "黄山风景区南大门换乘中心亚朵酒店 (RMB 315)",
+            "Dinner at 徽菜館"
           ]
         },
         {
@@ -502,10 +491,9 @@
           </div>
         </div>
 
-        <!-- 分頁 1: 行程規劃 (Itinerary) -->
         <div id="tab-itinerary" class="tab-section ${activeTabId === 'itinerary' ? 'active' : ''}">
           <div class="block-header">
-            <div class="block-title">🗺️ 5日行程規劃 (${data.itinerary.length} 天)</div>
+            <div class="block-title">🗺️ 行程規劃 (${data.itinerary.length} 天)</div>
           </div>
           ${data.itinerary.map(day => `
             <div class="day-card">
@@ -528,7 +516,6 @@
           `).join('')}
         </div>
 
-        <!-- 分頁 2: 開銷明細 -->
         <div id="tab-expenses" class="tab-section ${activeTabId === 'expenses' ? 'active' : ''}">
           <div class="block-header">
             <div class="block-title">🏨 支出紀錄 (${data.expenses.length})</div>
@@ -550,7 +537,6 @@
           </div>
         </div>
 
-        <!-- 分頁 3: 成員餘額 -->
         <div id="tab-members" class="tab-section ${activeTabId === 'members' ? 'active' : ''}">
           <div class="block-header">
             <div class="block-title">👥 成員結算餘額</div>
@@ -574,7 +560,6 @@
           </div>
         </div>
 
-        <!-- 分頁 4: 找數清單 -->
         <div id="tab-settle" class="tab-section ${activeTabId === 'settle' ? 'active' : ''}">
           <div class="block-header">
             <div class="block-title">⚡ 快速找數指南</div>
@@ -599,75 +584,79 @@
 
     renderUI(initialData, false);
 
-    // 解析 Itinerary 工作表 CSV 格式
-    function parseItineraryCSV(text) {
-      const lines = text.trim().split(/\r?\n/).map(l => {
-        const matches = [];
-        let quote = false, col = '';
-        for (let c of l) {
-          if (c === '"') quote = !quote;
-          else if (c === ',' && !quote) { matches.push(col.trim()); col = ''; }
-          else col += c;
-        }
-        matches.push(col.trim());
-        return matches;
-      });
-
+    // 解析 Google GViz Itinerary 表格
+    function parseGVizItinerary(table) {
+      const rows = table.rows || [];
       const days = [];
       let currentDay = null;
-      for (let r of lines) {
-        const col0 = r[0] || '';
-        const col1 = r[1] || '';
-        const col2 = r[2] || '';
-        const text = r[3] || '';
 
-        if (col2 && /^D\d+/i.test(col2)) {
-          currentDay = { day: col2, weekday: col0, date: col1, items: [] };
+      for (let r of rows) {
+        const cells = r.c || [];
+        const vals = cells.map(c => (c && c.v !== null && c.v !== undefined) ? String(c.v).trim() : '');
+        while (vals.length < 4) vals.push('');
+
+        const [col0, col1, col2, col3] = vals;
+
+        let dayMarker = '';
+        for (let idx = 0; idx < Math.min(3, vals.length); idx++) {
+          const v = vals[idx].toUpperCase();
+          if (/^D\d+$/i.test(v)) {
+            dayMarker = vals[idx];
+            break;
+          }
+        }
+
+        if (dayMarker) {
+          const weekday = col0 !== dayMarker ? col0 : '';
+          const dateStr = col1 !== dayMarker ? col1 : '';
+          currentDay = {
+            day: dayMarker,
+            weekday: weekday,
+            date: dateStr,
+            items: []
+          };
           days.push(currentDay);
         }
-        if (text && currentDay) {
-          currentDay.items.push(text);
+
+        let itemText = col3;
+        if (!itemText && !dayMarker) {
+          itemText = vals.find(v => v !== '') || '';
+        }
+
+        if (itemText && currentDay) {
+          currentDay.items.push(itemText);
         }
       }
       return days.length > 0 ? days : null;
     }
 
-    // 後台嘗試連線最新 Google Sheet
-    async function fetchLiveUpdates() {
-      let isLive = false;
-
-      // 1. 動態讀取 Itinerary 表
-      if (ITINERARY_CSV_URL && ITINERARY_CSV_URL.startsWith('http')) {
-        try {
-          const res = await fetch(ITINERARY_CSV_URL + '&t=' + Date.now());
-          if (res.ok) {
-            const text = await res.text();
-            const parsed = parseItineraryCSV(text);
-            if (parsed && parsed.length > 0) {
-              currentData.itinerary = parsed;
-              isLive = true;
-            }
-          }
-        } catch (e) {
-          console.log("Itinerary dynamic load skipped/failed:", e);
-        }
-      }
-
-      // 2. 檢測 Expense 表
-      if (EXPENSE_CSV_URL && EXPENSE_CSV_URL.startsWith('http')) {
-        try {
-          const res = await fetch(EXPENSE_CSV_URL + '&t=' + Date.now());
-          if (res.ok) isLive = true;
-        } catch (e) {
-          console.log("Expense check skipped:", e);
-        }
-      }
-
-      if (isLive) {
-        renderUI(currentData, true);
-      }
+    // 跨域零限制 JSONP 載入器
+    function loadSheetJSONP(sheetName, callbackName) {
+      const oldScript = document.getElementById('script-' + callbackName);
+      if (oldScript) oldScript.remove();
+      const script = document.createElement('script');
+      script.id = 'script-' + callbackName;
+      script.src = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?sheet=${encodeURIComponent(sheetName)}&tqx=responseHandler:${callbackName}&t=${Date.now()}`;
+      document.body.appendChild(script);
     }
 
+    // Itinerary 回調處理
+    window.handleItineraryResponse = function(response) {
+      if (response && response.table) {
+        const parsedDays = parseGVizItinerary(response.table);
+        if (parsedDays && parsedDays.length > 0) {
+          currentData.itinerary = parsedDays;
+          renderUI(currentData, true);
+        }
+      }
+    };
+
+    // 觸發全自動即時刷新
+    function fetchLiveUpdates() {
+      loadSheetJSONP('Itinerary', 'handleItineraryResponse');
+    }
+
+    // 頁面載入後自動向 Google 發送即時更新請求
     setTimeout(fetchLiveUpdates, 500);
   </script>
 </body>

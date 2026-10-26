@@ -223,11 +223,51 @@
       color: var(--text);
     }
 
-    /* Expense List */
+    /* Expense List & Grouping */
     .expense-list {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 16px;
+    }
+
+    .expense-date-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .expense-date-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 2px;
+    }
+
+    .expense-date-badge-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .expense-date-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .expense-date-subtotal {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      background: rgba(59, 130, 246, 0.12);
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+
+    .expense-group-items {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
 
     .expense-card {
@@ -562,20 +602,20 @@
         <span>💰</span> 你的結算狀態 (<span id="summaryUserName">Winson</span>)
       </div>
       <div class="summary-balance" id="summaryNetBalance">
-        + ¥3,887.25 <span class="summary-balance-desc" id="summaryNetDesc">(應收回)</span>
+        + ¥4,604.50 <span class="summary-balance-desc" id="summaryNetDesc">(應收回)</span>
       </div>
       <div class="summary-grid">
         <div class="grid-col">
           <span class="grid-label">行程總開銷</span>
-          <span class="grid-value" id="totalExpenseVal">¥5,183.00</span>
+          <span class="grid-value" id="totalExpenseVal">¥6,156.50</span>
         </div>
         <div class="grid-col">
           <span class="grid-label">均攤/人</span>
-          <span class="grid-value" id="perPersonVal">¥1,295.75</span>
+          <span class="grid-value" id="perPersonVal">¥1,539.13</span>
         </div>
         <div class="grid-col">
           <span class="grid-label">你已墊付</span>
-          <span class="grid-value" id="userPaidVal">¥5,183.00</span>
+          <span class="grid-value" id="userPaidVal">¥6,156.50</span>
         </div>
       </div>
     </div>
@@ -588,10 +628,10 @@
       <div class="itinerary-list" id="itineraryContainer" style="margin-top: 12px;"></div>
     </div>
 
-    <!-- Tab 2: 開銷 -->
+    <!-- Tab 2: 開銷 (依日期與行程順序排序) -->
     <div id="tab-expense" style="display: none;">
       <div class="section-header">
-        <span>🏨 支出紀錄 (<span id="expenseCount">3</span>)</span>
+        <span>📊 支出紀錄 (<span id="expenseCount">5</span>)</span>
       </div>
       <div class="expense-list" id="expenseContainer" style="margin-top: 12px;"></div>
     </div>
@@ -640,9 +680,11 @@
     const MEMBERS = ['Winson', 'Shirn', 'Bobo', '秋明'];
     let currentUser = localStorage.getItem('active_user') || 'Winson';
 
-    // 初始備援資料 (精確的 3 筆開銷)
+    // 初始備援資料
     let state = {
       expenses: [
+        { type: '交通', date: '2026-12-24', desc: '高鐵 (深圳北 to 黃山北 08:35 – 13:41)', amount: 613, paidBy: 'Winson', remark: '高鐵車票' },
+        { type: '門票', date: '2026-12-24', desc: '呈坎景區門票', amount: 360.5, paidBy: 'Winson', remark: '門票 ¥103/人，秋明半價（¥51.5）', shares: { 'Winson': 103, 'Shirn': 103, 'Bobo': 103, '秋明': 51.5 } },
         { type: '住宿', date: '2026-12-24', desc: '黃山風景區南大門換乘中心亞朵酒店', amount: 615, paidBy: 'Winson', remark: '2間 高級雙床房 (1晚)' },
         { type: '住宿', date: '2026-12-25', desc: '黃山白雲賓館', amount: 3166, paidBy: 'Winson', remark: '2間 B區特惠標間 (含早晚餐)' },
         { type: '住宿', date: '2026-12-26', desc: '展楓酒店(景德鎮陶溪川北路店)', amount: 1402, paidBy: 'Winson', remark: '2間 豪華雙床房 (2晚) 訂單編號 1128151957288290' }
@@ -650,7 +692,8 @@
       itinerary: [
         {
           day: 'D1', date: '24/12/2026 (Thur)', items: [
-            { text: 'G902 11:35 to 17:06 香港西九龍 to 黃山北', type: 'transport', icon: '🚅' },
+            { text: '08:35 to 13:41 深圳北 to 黃山北', type: 'transport', icon: '🚅' },
+            { text: '黃山北站打車前往「呈坎景區」遊覽', type: 'spot', icon: '⛰️' },
             { text: '黄山风景区南大门换乘中心亚朵酒店 (RMB 315)', type: 'hotel', icon: '🏨' },
             { text: 'Dinner at 徽菜館 2220', type: 'food', icon: '📍' }
           ]
@@ -692,6 +735,134 @@
     // 格式化數字
     function fmt(num) {
       return '¥' + Number(num).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // 日期標準化 (支援 DD/MM/YYYY, YYYY-MM-DD, 以及 Google Sheets GViz 的 Date(y,m,d))
+    function normalizeDate(str) {
+      if (!str) return '';
+      str = String(str).trim();
+
+      // GViz Date 物件字串: Date(2026, 11, 24) -> 注意 GViz 的月份是 0-indexed
+      const mGviz = str.match(/^Date\((\d{4}),\s*(\d{1,2}),\s*(\d{1,2})\)/);
+      if (mGviz) {
+        const y = mGviz[1];
+        const m = String(parseInt(mGviz[2], 10) + 1).padStart(2, '0');
+        const d = String(parseInt(mGviz[3], 10)).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+
+      // DD/MM/YYYY
+      const m1 = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (m1) {
+        return `${m1[3]}-${m1[2].padStart(2, '0')}-${m1[1].padStart(2, '0')}`;
+      }
+
+      // YYYY-MM-DD 或 YYYY/MM/DD
+      const m2 = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (m2) {
+        return `${m2[1]}-${m2[2].padStart(2, '0')}-${m2[3].padStart(2, '0')}`;
+      }
+
+      return str;
+    }
+
+    // 安全解析金額 (防範 ¥、逗號、空白)
+    function parseSafeAmount(val) {
+      if (val === null || val === undefined) return NaN;
+      const clean = String(val).replace(/[^0-9.-]/g, '');
+      return clean ? parseFloat(clean) : NaN;
+    }
+
+    // 比對開銷項目與行程項目的關聯度
+    function getItineraryMatchScore(exp, itinItem) {
+      const desc = ((exp.desc || '') + ' ' + (exp.remark || '')).toLowerCase();
+      const text = (itinItem.text || '').toLowerCase();
+      let score = 0;
+
+      const keywords = ['高鐵', '深圳北', '黃山北', '呈坎', '亞朵', '亚朵', '白雲', '白云', '展楓', '展枫', '陶博城', '古窑', '古窯', '陶溪川', '陶阳里', '陶陽里', '御窑', '御窯', '徽菜'];
+      for (const kw of keywords) {
+        if (desc.includes(kw) && text.includes(kw)) {
+          score += 30;
+        }
+      }
+
+      if (exp.type === '交通' && itinItem.type === 'transport') score += 15;
+      if (exp.type === '住宿' && itinItem.type === 'hotel') score += 15;
+      if (exp.type === '餐飲' && itinItem.type === 'food') score += 15;
+      if (exp.type === '門票' && itinItem.type === 'spot') score += 15;
+
+      for (let len = 4; len >= 2; len--) {
+        for (let i = 0; i <= desc.length - len; i++) {
+          const sub = desc.substr(i, len);
+          if (sub.trim() && text.includes(sub)) {
+            score += len * 2;
+          }
+        }
+      }
+
+      return score;
+    }
+
+    // 將開銷依日期分組，並依照行程先後順序排序
+    function groupAndSortExpenses() {
+      const itinMap = {};
+      (state.itinerary || []).forEach(day => {
+        const norm = normalizeDate(day.date);
+        if (norm) itinMap[norm] = day;
+      });
+
+      const groups = {};
+      state.expenses.forEach(exp => {
+        const norm = normalizeDate(exp.date) || '9999-99-99';
+        if (!groups[norm]) groups[norm] = [];
+        groups[norm].push(exp);
+      });
+
+      const sortedDates = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+
+      return sortedDates.map(normDate => {
+        const dayItin = itinMap[normDate];
+        const dayExpenses = groups[normDate];
+
+        // 依據當日行程的先後順序進行排序
+        dayExpenses.sort((a, b) => {
+          let orderA = 999;
+          let orderB = 999;
+
+          if (dayItin && dayItin.items && dayItin.items.length > 0) {
+            let maxA = 0;
+            dayItin.items.forEach((item, idx) => {
+              const sc = getItineraryMatchScore(a, item);
+              if (sc > maxA && sc >= 10) {
+                maxA = sc;
+                orderA = idx;
+              }
+            });
+
+            let maxB = 0;
+            dayItin.items.forEach((item, idx) => {
+              const sc = getItineraryMatchScore(b, item);
+              if (sc > maxB && sc >= 10) {
+                maxB = sc;
+                orderB = idx;
+              }
+            });
+          }
+
+          return orderA - orderB;
+        });
+
+        const daySubtotal = dayExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
+
+        return {
+          normDate,
+          dayItin,
+          dayTag: dayItin ? dayItin.day : '',
+          dateDisplay: dayItin ? dayItin.date : (normDate === '9999-99-99' ? '其他 / 未定日期' : normDate),
+          subtotal: daySubtotal,
+          expenses: dayExpenses
+        };
+      });
     }
 
     // 計算結算與餘額
@@ -760,26 +931,45 @@
       document.getElementById('perPersonVal').textContent = fmt(perShare);
       document.getElementById('userPaidVal').textContent = fmt(myStats.paid);
 
-      // 開銷列表
+      // 開銷列表 (按日期分組 + 依行程順序排列)
       document.getElementById('expenseCount').textContent = state.expenses.length;
       const expenseContainer = document.getElementById('expenseContainer');
-      expenseContainer.innerHTML = state.expenses.map(exp => {
-        let icon = '🏷️';
-        if (exp.type === '住宿') icon = '🏨';
-        else if (exp.type === '交通') icon = '🚅';
-        else if (exp.type === '餐飲') icon = '🍽️';
-        else if (exp.type === '門票') icon = '🎟️';
+      const groupedExpenses = groupAndSortExpenses();
+
+      expenseContainer.innerHTML = groupedExpenses.map(group => {
+        const cardsHtml = group.expenses.map(exp => {
+          let icon = '🏷️';
+          if (exp.type === '住宿') icon = '🏨';
+          else if (exp.type === '交通') icon = '🚅';
+          else if (exp.type === '餐飲') icon = '🍽️';
+          else if (exp.type === '門票') icon = '🎟️';
+
+          return `
+            <div class="expense-card">
+              <div class="expense-icon-box">${icon}</div>
+              <div class="expense-info">
+                <div class="expense-name">${exp.desc}</div>
+                <div class="expense-meta">${exp.remark ? exp.remark + ' • ' : ''}${exp.type}</div>
+              </div>
+              <div class="expense-right">
+                <div class="expense-amount">${fmt(exp.amount)}</div>
+                <div class="expense-payer">${exp.paidBy} 墊付</div>
+              </div>
+            </div>
+          `;
+        }).join('');
 
         return `
-          <div class="expense-card">
-            <div class="expense-icon-box">${icon}</div>
-            <div class="expense-info">
-              <div class="expense-name">${exp.desc}</div>
-              <div class="expense-meta">${exp.date} • ${exp.remark || exp.type}</div>
+          <div class="expense-date-group">
+            <div class="expense-date-header">
+              <div class="expense-date-badge-box">
+                ${group.dayTag ? `<span class="day-badge">${group.dayTag}</span>` : ''}
+                <span class="expense-date-title">${group.dateDisplay}</span>
+              </div>
+              <span class="expense-date-subtotal">小計 ${fmt(group.subtotal)}</span>
             </div>
-            <div class="expense-right">
-              <div class="expense-amount">${fmt(exp.amount)}</div>
-              <div class="expense-payer">${exp.paidBy} 墊付</div>
+            <div class="expense-group-items">
+              ${cardsHtml}
             </div>
           </div>
         `;
@@ -943,7 +1133,7 @@
       });
     }
 
-    // 解析 Google Sheet Expense 表 (嚴格排除底部統計與結算摘要列)
+    // 解析 Google Sheet Expense 表 (使用 continue 確保不漏掉任何位置的新開支)
     function parseExpenses(table) {
       const rows = table.rows || [];
       const newExpenses = [];
@@ -956,22 +1146,21 @@
         const rawDate = r[1] ? String(r[1].f || r[1].v || '').trim() : '';
         const desc = r[2] ? String(r[2].v || '').trim() : '';
 
-        // 關鍵過濾 1：遇到「總計」或「【」說明已進入底部結算統計區，直接結束讀取支出項目
-        if (desc.includes('總計') || desc.includes('【')) {
-          break;
-        }
-
-        // 關鍵過濾 2：標題列跳過
+        // 排除底部統計和標題
+        if (desc.includes('總計') || desc.includes('【')) continue;
         if (!desc || desc === 'Description') continue;
-
-        // 關鍵過濾 3：真實開銷必定有「日期」或「支出類別」，且項目名稱不可只是成員名字
         if (!rawDate && !type) continue;
         if (MEMBERS.includes(desc) && !rawDate) continue;
 
-        const amount = r[3] ? parseFloat(r[3].v) : NaN;
+        // 安全解析金額 (防範 ¥、逗號)
+        const amount = r[3] ? parseSafeAmount(r[3].v !== null && r[3].v !== undefined ? r[3].v : r[3].f) : NaN;
         if (isNaN(amount) || amount <= 0) continue;
 
-        const paidBy = (r[4] && String(r[4].v || '').trim()) ? String(r[4].v).trim() : 'Winson';
+        // 付款人 (防範大小寫與多餘空格)
+        let rawPayer = (r[4] && String(r[4].v || '').trim()) ? String(r[4].v).trim() : 'Winson';
+        const matchedPayer = MEMBERS.find(m => m.toLowerCase() === rawPayer.toLowerCase());
+        const paidBy = matchedPayer || 'Winson';
+
         const remark = r[5] ? String(r[5].v || '').trim() : '';
 
         // 讀取個別成員自訂分攤金額 (Col G~J)
@@ -979,8 +1168,8 @@
         let hasCustomShares = false;
         MEMBERS.forEach((m, idx) => {
           const colIdx = 6 + idx;
-          if (r[colIdx] && r[colIdx].v !== null && r[colIdx].v !== undefined) {
-            const sVal = parseFloat(r[colIdx].v);
+          if (r[colIdx]) {
+            const sVal = parseSafeAmount(r[colIdx].v !== null && r[colIdx].v !== undefined ? r[colIdx].v : r[colIdx].f);
             if (!isNaN(sVal)) {
               shares[m] = sVal;
               hasCustomShares = true;
@@ -1041,7 +1230,7 @@
           } else if (/Dinner|餐|食|早餐|晚餐/i.test(detail)) {
             itemType = 'food';
             itemIcon = '🍽️';
-          } else if (/峰|頂|海|石|橋|亭|索道|博覽|博物館|街區/i.test(detail)) {
+          } else if (/峰|頂|海|石|橋|亭|索道|博覽|博物館|街區|呈坎/i.test(detail)) {
             itemType = 'spot';
             itemIcon = '⛰️';
           }

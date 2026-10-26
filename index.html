@@ -640,7 +640,7 @@
     const MEMBERS = ['Winson', 'Shirn', 'Bobo', '秋明'];
     let currentUser = localStorage.getItem('active_user') || 'Winson';
 
-    // 完整的初始/快取備援資料 (確保載入時第一時間展示最新3筆開銷)
+    // 初始備援資料 (精確的 3 筆開銷)
     let state = {
       expenses: [
         { type: '住宿', date: '2026-12-24', desc: '黃山風景區南大門換乘中心亞朵酒店', amount: 615, paidBy: 'Winson', remark: '2間 高級雙床房 (1晚)' },
@@ -701,13 +701,25 @@
 
       const memberStats = {};
       MEMBERS.forEach(m => {
-        memberStats[m] = { paid: 0, share: perShare, net: 0 };
+        memberStats[m] = { paid: 0, share: 0, net: 0 };
       });
 
       state.expenses.forEach(e => {
+        const amt = Number(e.amount || 0);
         const payer = e.paidBy || 'Winson';
         if (memberStats[payer]) {
-          memberStats[payer].paid += Number(e.amount || 0);
+          memberStats[payer].paid += amt;
+        }
+
+        if (e.shares && Object.keys(e.shares).length > 0) {
+          MEMBERS.forEach(m => {
+            memberStats[m].share += Number(e.shares[m] || 0);
+          });
+        } else {
+          const even = amt / MEMBERS.length;
+          MEMBERS.forEach(m => {
+            memberStats[m].share += even;
+          });
         }
       });
 
@@ -896,12 +908,12 @@
       render();
     }
 
-    // GViz JSONP 動態載入器 (強制加上 Cache-Buster 時間戳)
+    // GViz JSONP 動態載入器 (帶時間戳防快取)
     function fetchSheetJSONP(sheetName) {
       return new Promise((resolve, reject) => {
         const callbackName = 'gviz_cb_' + Math.floor(Math.random() * 10000000);
         const script = document.createElement('script');
-        const timestamp = Date.now(); // 強制每次請求加上最新毫秒時間戳，徹底防快取
+        const timestamp = Date.now();
 
         script.src = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=responseHandler:${callbackName}&sheet=${encodeURIComponent(sheetName)}&tq=&_=${timestamp}`;
 
@@ -931,7 +943,7 @@
       });
     }
 
-    // 解析 Google Sheet Expense 表
+    // 解析 Google Sheet Expense 表 (嚴格排除底部統計與結算摘要列)
     function parseExpenses(table) {
       const rows = table.rows || [];
       const newExpenses = [];
@@ -940,24 +952,50 @@
         const r = rows[i].c;
         if (!r) continue;
 
-        const type = r[0] ? String(r[0].v || '') : '';
-        const rawDate = r[1] ? String(r[1].f || r[1].v || '') : '';
-        const desc = r[2] ? String(r[2].v || '') : '';
-        const amount = r[3] ? parseFloat(r[3].v) : NaN;
-        const paidBy = r[4] ? String(r[4].v || '') : 'Winson';
-        const remark = r[5] ? String(r[5].v || '') : '';
+        const type = r[0] ? String(r[0].v || '').trim() : '';
+        const rawDate = r[1] ? String(r[1].f || r[1].v || '').trim() : '';
+        const desc = r[2] ? String(r[2].v || '').trim() : '';
 
-        // 排除標題列或底部總計統計列
-        if (!desc || desc === 'Description' || desc === '總計' || desc.includes('【')) continue;
+        // 關鍵過濾 1：遇到「總計」或「【」說明已進入底部結算統計區，直接結束讀取支出項目
+        if (desc.includes('總計') || desc.includes('【')) {
+          break;
+        }
+
+        // 關鍵過濾 2：標題列跳過
+        if (!desc || desc === 'Description') continue;
+
+        // 關鍵過濾 3：真實開銷必定有「日期」或「支出類別」，且項目名稱不可只是成員名字
+        if (!rawDate && !type) continue;
+        if (MEMBERS.includes(desc) && !rawDate) continue;
+
+        const amount = r[3] ? parseFloat(r[3].v) : NaN;
         if (isNaN(amount) || amount <= 0) continue;
+
+        const paidBy = (r[4] && String(r[4].v || '').trim()) ? String(r[4].v).trim() : 'Winson';
+        const remark = r[5] ? String(r[5].v || '').trim() : '';
+
+        // 讀取個別成員自訂分攤金額 (Col G~J)
+        const shares = {};
+        let hasCustomShares = false;
+        MEMBERS.forEach((m, idx) => {
+          const colIdx = 6 + idx;
+          if (r[colIdx] && r[colIdx].v !== null && r[colIdx].v !== undefined) {
+            const sVal = parseFloat(r[colIdx].v);
+            if (!isNaN(sVal)) {
+              shares[m] = sVal;
+              hasCustomShares = true;
+            }
+          }
+        });
 
         newExpenses.push({
           type: type || '其他',
           date: rawDate,
           desc: desc,
           amount: amount,
-          paidBy: paidBy || 'Winson',
-          remark: remark
+          paidBy: paidBy,
+          remark: remark,
+          shares: hasCustomShares ? shares : null
         });
       }
 
@@ -994,7 +1032,7 @@
           let itemType = 'spot';
           let itemIcon = '📍';
 
-          if (/G\\d+|高鐵|車|Taxi|的士|交通/i.test(detail)) {
+          if (/G\d+|高鐵|車|Taxi|的士|交通/i.test(detail)) {
             itemType = 'transport';
             itemIcon = '🚅';
           } else if (/酒店|賓館/i.test(detail)) {
